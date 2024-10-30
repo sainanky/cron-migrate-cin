@@ -74,9 +74,7 @@ async function preprocessImage(inputPath, outputPath) {
 
 async function solveCaptchaWithOCR(imagePath) {
   try {
-    const { data: { text } } = await Tesseract.recognize(imagePath, 'eng', {
-      logger: (m) => console.log(m), // Log OCR progress
-    });
+    const { data: { text } } = await Tesseract.recognize(imagePath, 'eng');
     const solution = text.trim();
     // console.log("Captcha Solution:", solution);
     return solution;

@@ -1,3 +1,5 @@
+require('dotenv').config();
+require('../connection/database_common');
 const conn = require("../connection/database_common");
 const dbQry = require("../connection/sql_query");
 const axios = require("axios");
@@ -5,83 +7,63 @@ const mysql = require("mysql2");
 const captchaScript = require("./captcha");
 const clientLibV3 = require('./client-lib-v3');
 const moment = require('moment');
-let rocAllData = [];
-let rocIndex = 0;
-
-exports.init = async() =>{
-    try{
-        let query = `select ROC_NAME, ROC_CODE, VALUE AS ROC_VALUE from technowire_finanvo.ROC_CONFIG WHERE IS_COMPLETED = 0 LIMIT 100`;
-        let doc = await dbQry(conn, query);
-        if(doc.length > 0){
-            rocAllData = doc;
-            this.main();
-        }
-        else{
-            await this.resetCount();
-            this.init();
-        }
-    }
-    catch(err){
-        console.log("error in init =", err)
-    }
-}
 
 exports.main = async() =>{
     try{
-        let { ROC_NAME, ROC_CODE, ROC_VALUE} = rocAllData[rocIndex];
-        console.log(`Curr Roc Name = ${ROC_NAME}, Curr Roc value = ${ROC_VALUE}`)
-        let response = await captchaScript.fetchCaptchaImage();
-        console.log(response)
-        let { solution, pre_CT, message } = response;
-        ROC_VALUE = Number(ROC_VALUE) || 0;
-        if(message == 'success'){
-            let rocResponse = await this.getMcaRocData(ROC_NAME, ROC_VALUE, solution, pre_CT);
-            console.log("data coming from rocResponse");
-            if(rocResponse && rocResponse.message == 'Data fetched Successfully'){
-                let cinData = rocResponse.data.result;
-                console.log("rocResponse Data =", cinData);
-                await this.saveCin(cinData);
-                ROC_VALUE++;
-                rocAllData[rocIndex]['ROC_VALUE'] = ROC_VALUE;
-                await this.updateRocCount(ROC_CODE, ROC_VALUE);
+        let query = `select ROC_NAME, ROC_CODE, VALUE AS ROC_VALUE from technowire_finanvo.ROC_CONFIG WHERE IS_COMPLETED = 0 LIMIT 1`;
+        let doc = await dbQry(conn, query);
+        if(doc.length > 0){
+            let { ROC_NAME, ROC_CODE, ROC_VALUE} = doc[0];
+            console.log(`Curr Roc Name = ${ROC_NAME}, Curr Roc value = ${ROC_VALUE}`)
+            let response = await captchaScript.fetchCaptchaImage();
+            console.log(response)
+            let { solution, pre_CT, message } = response;
+            ROC_VALUE = Number(ROC_VALUE) || 0;
+            if(message == 'success'){
+                let rocResponse = await this.getMcaRocData(ROC_NAME, ROC_VALUE, solution, pre_CT);
+                console.log("data coming from rocResponse");
+                if(rocResponse && rocResponse.message == 'Data fetched Successfully'){
+                    let cinData = rocResponse.data.result;
+                    console.log("rocResponse Data =", cinData);
+                    await this.saveCin(cinData);
+                    ROC_VALUE++;
+                    await this.updateRocCount(ROC_CODE, ROC_VALUE);
+                    setTimeout(() => {
+                        this.main() 
+                    }, 2000);
+                }
+                else if(rocResponse && rocResponse.message == 'No results found'){
+                    console.log(`rocResponse Data = ${rocResponse.message} for roc = ${ROC_NAME}`);
+                    await this.updateRocCount(ROC_CODE, ROC_VALUE, true);
+                    setTimeout(() => {
+                        this.main() 
+                    }, 2000);
+                }
+                else{
+                    console.log("rocResponse Data =", rocResponse);
+                }
+            }
+            else if(message == 'retry'){
                 setTimeout(() => {
                     this.main() 
                 }, 2000);
             }
-            else if(rocResponse && rocResponse.message == 'No results found'){
-                console.log(`rocResponse Data = ${rocResponse.message} for roc = ${ROC_NAME}`);
-                if(rocIndex == rocAllData.length - 1) {
-                    rocIndex = 0;
-                    await this.resetCount();
-                    setTimeout(() => {
-                        this.init();
-                    }, 1000 * 60 * 10);
-                }
-                else {
-                    await this.updateRocCount(ROC_CODE, ROC_VALUE, true);
-                    rocIndex++;
-                    setTimeout(() => {
-                        this.init() 
-                    }, 2000);
-                }
-            }
-            else{
-                console.log("rocResponse Data =", rocResponse);
-            }
         }
-        else if(message == 'retry'){
+        else{
+            await this.resetCount();
             setTimeout(() => {
-                this.main() 
-            }, 2000);
+                this.main();
+            }, 1000 * 60 * 10);
         }
     }
     catch(err){
-        console.log("error in resadasdasdsdasasd")
+        console.log("error in main =", err);
         setTimeout(() => {
-            this.main() 
-        }, 2000);
+            this.main();
+        }, 1000 * 5);
     }
 }
+
 
 exports.getMcaRocData = (ROC_NAME, ROC_VAL, solution, pre_CT)=>{
     return new Promise(async(resolve, reject) =>{
@@ -126,33 +108,10 @@ exports.getMcaRocData = (ROC_NAME, ROC_VAL, solution, pre_CT)=>{
     })
 }
 
-exports.saveCin = (cinData) =>{
-    return new Promise(async (resolve, reject)=>{
-        try{
-            let query = `INSERT IGNORE INTO master_data.CIN (CIN, COMPANY_NAME, COUNTRY_INC, DATE_OF_REGISTRATION, ROC, TYPE_OF_COMPANY, STATE, STATUS, COMPANY_STATUS, UPDATED_1, PRIORITY) VALUES`;
-            let subQry = '';
-            for(let i = 0; i < cinData.length; i++){
-                let v = cinData[i];
-                let dateOfIncorporation = moment(v.dateOfIncorporation, 'YYYY-MM-DD').format('MM/DD/YYYY')
-                subQry = `(${mysql.escape(v.cnNmbr)}, ${mysql.escape(v.cmpnyNm)}, ${mysql.escape(v.cmpnyOrgn)}, 
-                ${mysql.escape(dateOfIncorporation)}, ${mysql.escape(v.rocCode)}, ${mysql.escape(v.acntType)},
-                ${mysql.escape(v.state)}, ${mysql.escape(v.cmpnySts)}, ${mysql.escape(v.cmpnySts)}, NOW(), 30)`;
-                if(i < cinData.length - 1) subQry += ',';
-            }
-            let doc = await dbQry(conn, query + subQry);
-            console.log("data saved into cin");
-            resolve(doc);
-        }
-        catch(err){
-            console.log(err);
-            reject(err);
-        }
-    })
-}
-
 exports.updateRocCount = (rocCode, rocValue, IS_COMPLETED) =>{
     return new Promise(async(resolve, reject) =>{
         try{
+            rocValue = formatNumber(rocValue);
             let query = `update technowire_finanvo.ROC_CONFIG SET VALUE = '${rocValue}', UPDATED_TIME = NOW() WHERE ROC_CODE = '${rocCode}'`;
             if(IS_COMPLETED){
                 query = `update technowire_finanvo.ROC_CONFIG SET VALUE = '${rocValue}', UPDATED_TIME = NOW(), IS_COMPLETED = 1 WHERE ROC_CODE = '${rocCode}'`;
@@ -170,7 +129,7 @@ exports.updateRocCount = (rocCode, rocValue, IS_COMPLETED) =>{
 exports.resetCount = () =>{
     return new Promise(async(resolve, reject) =>{
         try{
-            let query = `update technowire_finanvo.ROC_CONFIG SET UPDATED_TIME = NOW(),  IS_COMPLETED = 1`;
+            let query = `update technowire_finanvo.ROC_CONFIG SET UPDATED_TIME = NOW(),  IS_COMPLETED = 0`;
             console.log("query for update= ", query)
             let doc = await dbQry(conn, query);
             resolve(doc);
@@ -180,3 +139,11 @@ exports.resetCount = () =>{
         }
     })
 }
+
+function formatNumber(num) {
+    return num.toString().padStart(6, '0');
+}
+
+setTimeout(() => {
+    this.main();
+}, 2000);

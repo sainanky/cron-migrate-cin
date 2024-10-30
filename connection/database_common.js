@@ -8,7 +8,7 @@ var pool = mysql.createPool({
 });
 
 let url = `mysql -u ${process.env.DB_USER} -p'${process.env.DB_PASSWORD}' -h ${process.env.DB_HOST} -P ${process.env.DB_PORT} -D Common`;
-console.log(url)
+// console.log(url)
 pool.getConnection((err, connection) => {
     if(err) {
         console.log("error in ", 'Common', err);
