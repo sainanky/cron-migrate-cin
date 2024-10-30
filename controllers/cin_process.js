@@ -10,9 +10,16 @@ let rocIndex = 0;
 
 exports.init = async() =>{
     try{
-        let query = `select ROC_NAME, ROC_CODE, VALUE AS ROC_VALUE from technowire_finanvo.ROC_CONFIG LIMIT 100`;
-        rocAllData = await dbQry(conn, query);
-        this.main();
+        let query = `select ROC_NAME, ROC_CODE, VALUE AS ROC_VALUE from technowire_finanvo.ROC_CONFIG WHERE IS_COMPLETED = 0 LIMIT 100`;
+        let doc = await dbQry(conn, query);
+        if(doc.length > 0){
+            rocAllData = doc;
+            this.main();
+        }
+        else{
+            await this.resetCount();
+            this.init();
+        }
     }
     catch(err){
         console.log("error in init =", err)
@@ -45,14 +52,16 @@ exports.main = async() =>{
                 console.log(`rocResponse Data = ${rocResponse.message} for roc = ${ROC_NAME}`);
                 if(rocIndex == rocAllData.length - 1) {
                     rocIndex = 0;
+                    await this.resetCount();
                     setTimeout(() => {
-                        this.main();
+                        this.init();
                     }, 1000 * 60 * 10);
                 }
                 else {
+                    await this.updateRocCount(ROC_CODE, ROC_VALUE, true);
                     rocIndex++;
                     setTimeout(() => {
-                        this.main() 
+                        this.init() 
                     }, 2000);
                 }
             }
@@ -141,10 +150,27 @@ exports.saveCin = (cinData) =>{
     })
 }
 
-exports.updateRocCount = (rocCode, rocValue) =>{
+exports.updateRocCount = (rocCode, rocValue, IS_COMPLETED) =>{
     return new Promise(async(resolve, reject) =>{
         try{
             let query = `update technowire_finanvo.ROC_CONFIG SET VALUE = '${rocValue}', UPDATED_TIME = NOW() WHERE ROC_CODE = '${rocCode}'`;
+            if(IS_COMPLETED){
+                query = `update technowire_finanvo.ROC_CONFIG SET VALUE = '${rocValue}', UPDATED_TIME = NOW(), IS_COMPLETED = 1 WHERE ROC_CODE = '${rocCode}'`;
+            }
+            console.log("query for update= ", query)
+            let doc = await dbQry(conn, query);
+            resolve(doc);
+        }
+        catch(err){
+            resolve("");
+        }
+    })
+}
+
+exports.resetCount = () =>{
+    return new Promise(async(resolve, reject) =>{
+        try{
+            let query = `update technowire_finanvo.ROC_CONFIG SET UPDATED_TIME = NOW(),  IS_COMPLETED = 1`;
             console.log("query for update= ", query)
             let doc = await dbQry(conn, query);
             resolve(doc);

@@ -4,3 +4,4 @@ package-lock.json
 ./package-lock.json
 .env
 /captcha-images/*
+eng.traineddata
