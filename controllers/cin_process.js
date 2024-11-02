@@ -10,7 +10,7 @@ const moment = require('moment');
 
 exports.main = async() =>{
     try{
-        let query = `select ROC_NAME, ROC_CODE, VALUE AS ROC_VALUE from technowire_finanvo.ROC_CONFIG WHERE IS_COMPLETED = 0 LIMIT 1`;
+        let query = `select ROC_NAME, ROC_CODE, VALUE AS ROC_VALUE from technowire_finanvo.ROC_CONFIG WHERE IS_COMPLETED = 0 ORDER BY ID ASC LIMIT 1`;
         let doc = await dbQry(conn, query);
         if(doc.length > 0){
             let { ROC_NAME, ROC_CODE, ROC_VALUE} = doc[0];
@@ -57,7 +57,9 @@ exports.main = async() =>{
         }
     }
     catch(err){
-        console.log("error in main =", err);
+        let message = "Some other error found";
+        if(err && err.response && err.response.data && err.response.data.message) message = err.response.data.message;
+        console.error("error in main =", message);
         setTimeout(() => {
             this.main();
         }, 1000 * 5);
@@ -136,6 +138,30 @@ exports.resetCount = () =>{
         }
         catch(err){
             resolve("");
+        }
+    })
+}
+
+exports.saveCin = (cinData) =>{
+    return new Promise(async (resolve, reject)=>{
+        try{
+            let query = `INSERT IGNORE INTO master_data.CIN (CIN, COMPANY_NAME, COUNTRY_INC, DATE_OF_REGISTRATION, ROC, TYPE_OF_COMPANY, STATE, STATUS, COMPANY_STATUS, UPDATED_1, PRIORITY) VALUES`;
+            let subQry = '';
+            for(let i = 0; i < cinData.length; i++){
+                let v = cinData[i];
+                let dateOfIncorporation = moment(v.dateOfIncorporation, 'YYYY-MM-DD').format('MM/DD/YYYY')
+                subQry = `(${mysql.escape(v.cnNmbr)}, ${mysql.escape(v.cmpnyNm)}, ${mysql.escape(v.cmpnyOrgn)}, 
+                ${mysql.escape(dateOfIncorporation)}, ${mysql.escape(v.rocCode)}, ${mysql.escape(v.acntType)},
+                ${mysql.escape(v.state)}, ${mysql.escape(v.cmpnySts)}, ${mysql.escape(v.cmpnySts)}, NOW(), 30)`;
+                if(i < cinData.length - 1) subQry += ',';
+            }
+            let doc = await dbQry(conn, query + subQry);
+            console.log("data saved into cin");
+            resolve(doc);
+        }
+        catch(err){
+            console.log(err);
+            reject(err);
         }
     })
 }

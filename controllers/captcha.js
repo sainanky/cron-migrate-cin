@@ -54,7 +54,7 @@ exports.fetchCaptchaImage = () => {
       resolve({solution, pre_CT : "", message : "retry"});
 
     } catch (error) {
-      console.error('Error fetching captcha image:', error);
+      console.error('Error fetching captcha image');
       reject(error);
     }
   })
@@ -68,7 +68,7 @@ async function preprocessImage(inputPath, outputPath) {
       .toFile(outputPath);
     console.log("Image preprocessing complete.");
   } catch (error) {
-    console.error("Error during image preprocessing:", error);
+    console.error("Error during image preprocessing");
   }
 }
 
@@ -79,7 +79,7 @@ async function solveCaptchaWithOCR(imagePath) {
     // console.log("Captcha Solution:", solution);
     return solution;
   } catch (error) {
-    console.error('Error solving captcha with OCR:', error);
+    console.error('Error solving captcha with OCR');
   }
 }
 
@@ -124,7 +124,7 @@ function submitCaptchaSolution(solution, pre_CT) {
       resolve(pre_CT_new)
       // getMcaData(solution, pre_CT_new)
     } catch (error) {
-      console.error('Error submitting captcha solution:', error);
+      console.error('Error submitting captcha solution');
       reject(error);
     }
   })
